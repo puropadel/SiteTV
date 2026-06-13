@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Loja — Ecrã</title>
+<style>
+  :root{
+    --bg-top:    #0d1424;
+    --bg-bottom: #060a14;
+    --ink:       #f3f1ea;   /* hora */
+    --muted:     #8b93a8;   /* data / legendas */
+    --amber:     #e6b450;   /* acento / linha dos segundos */
+    --card:      #ffffff;   /* fundo do cartão do logótipo */
+    --card-ink:  #1a2236;
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+
+  html,body{ height:100%; width:100%; overflow:hidden; }
+
+  body{
+    background:
+      radial-gradient(120% 120% at 50% 0%, var(--bg-top) 0%, var(--bg-bottom) 70%);
+    color:var(--ink);
+    font-family:"Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    cursor:none;
+    -webkit-font-smoothing:antialiased;
+    user-select:none;
+    height:100vh;
+    width:100vw;
+  }
+
+  .stage{
+    height:100vh;
+    width:100vw;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:6.5vh;
+    padding:5.5vh 6vw 4.5vh;
+  }
+
+  /* ---------- Relógio (herói) ---------- */
+  .clockwrap{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width:100%;
+  }
+
+  .time{
+    font-size:200px;            /* fallback */
+    font-size:clamp(96px, 15.5vw, 440px);
+    line-height:0.92;
+    font-weight:700;
+    letter-spacing:-0.02em;
+    font-variant-numeric:tabular-nums;
+    font-feature-settings:"tnum" 1;
+  }
+
+  /* Assinatura: linha âmbar que avança ao longo de cada minuto */
+  .seconds-track{
+    margin-top:2.4vh;
+    width:min(46vw, 760px);
+    height:5px;
+    background:rgba(255,255,255,0.10);
+    border-radius:99px;
+    overflow:hidden;
+  }
+  .seconds-fill{
+    height:100%;
+    width:0%;
+    background:linear-gradient(90deg, rgba(230,180,80,0.35), var(--amber));
+    border-radius:99px;
+    box-shadow:0 0 18px rgba(230,180,80,0.45);
+  }
+
+  /* ---------- Slideshow de patrocinadores ---------- */
+  .sponsors{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    min-height:0;
+  }
+
+  .eyebrow{
+    font-size:14px;
+    font-size:clamp(11px, 1.05vw, 22px);
+    letter-spacing:0.42em;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin-bottom:2.4vh;
+    opacity:0.75;
+  }
+
+  .card{
+    position:relative;
+    width:min(58vw, 1120px);
+    height:min(40vh, 600px);
+    background:var(--card);
+    border-radius:28px;
+    box-shadow:0 30px 80px rgba(0,0,0,0.45);
+    overflow:hidden;
+  }
+
+  .slide{
+    position:absolute;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:5%;
+    opacity:0;
+    transition:opacity 900ms ease;
+  }
+  .slide.is-active{ opacity:1; }
+
+  .slide img{
+    max-width:100%;
+    max-height:100%;
+    object-fit:contain;
+  }
+
+  /* indicador de progresso discreto */
+  .dots{
+    margin-top:2.6vh;
+    display:flex;
+    gap:14px;
+    align-items:center;
+  }
+  .dot{
+    width:10px;
+    height:10px;
+    border-radius:99px;
+    background:rgba(255,255,255,0.22);
+    transition:background 300ms ease, width 300ms ease;
+  }
+  .dot.is-active{
+    width:30px;
+    background:var(--amber);
+  }
+
+  .demo-flag{
+    position:fixed;
+    bottom:2.4vh;
+    right:2.6vw;
+    font-size:clamp(10px, 0.9vw, 18px);
+    letter-spacing:0.18em;
+    text-transform:uppercase;
+    color:var(--muted);
+    opacity:0.5;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .slide{ transition:none; }
+    .seconds-fill{ transition:none; }
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="clockwrap">
+      <div class="time" id="time">--:--</div>
+      <div class="seconds-track"><div class="seconds-fill" id="secfill"></div></div>
+    </div>
+
+    <div class="sponsors">
+      <div class="eyebrow">Com o apoio de</div>
+      <div class="card" id="card"></div>
+      <div class="dots" id="dots"></div>
+    </div>
+  </div>
+
+  <div class="demo-flag" id="demoflag" style="display:none">Modo demonstração</div>
+
+<script>
+/* =================================================================
+   CONFIGURAÇÃO  —  é só isto que precisas de mexer
+   =================================================================
+
+   PATROCINADORES
+   --------------
+   Tens duas formas (escolhe uma):
+
+   A) Automático (zero código):  deixa SPONSORS = []  e mete os
+      ficheiros na pasta  sponsors/  com nomes  1, 2, 3, ...
+      (ex.: sponsors/1.png, sponsors/2.jpg, sponsors/3.svg).
+      A página deteta-os sozinha, por ordem, até faltar um número.
+
+   B) Manual:  lista os caminhos à mão (controlas ordem e nomes):
+        var SPONSORS = [
+          "sponsors/agua-leve.png",
+          "sponsors/cafe-central.svg",
+          "sponsors/talho-do-ze.jpg"
+        ];
+   ================================================================= */
+
+  var SPONSORS = [];               // ver A) / B) acima
+  var SLIDE_SECONDS   = 5;         // tempo de cada logótipo no ecrã
+  var SHOW_SECONDS_BAR = true;     // linha âmbar de progresso por minuto
+  var AUTODETECT_MAX = 60;         // limite da deteção automática
+
+/* ===============  daqui para baixo não precisas de mexer  =========== */
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- RELÓGIO ---------- */
+  function two(n){ return (n < 10 ? "0" : "") + n; }
+
+  function tick(){
+    var now = new Date();
+    $("time").textContent = two(now.getHours()) + ":" + two(now.getMinutes());
+
+    if (SHOW_SECONDS_BAR){
+      var pct = ((now.getSeconds() + now.getMilliseconds()/1000) / 60) * 100;
+      $("secfill").style.width = pct.toFixed(2) + "%";
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---------- DETEÇÃO AUTOMÁTICA DOS LOGÓTIPOS ---------- */
+  var EXTS = ["png","jpg","jpeg","webp","svg","gif"];
+
+  function tryLoad(src){
+    return new Promise(function(resolve){
+      var img = new Image();
+      img.onload = function(){ resolve(src); };
+      img.onerror = function(){ resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function findAtIndex(i){
+    var idx = 0;
+    return new Promise(function(resolve){
+      function next(){
+        if (idx >= EXTS.length){ resolve(null); return; }
+        var src = "sponsors/" + i + "." + EXTS[idx];
+        idx++;
+        tryLoad(src).then(function(found){
+          if (found){ resolve(found); } else { next(); }
+        });
+      }
+      next();
+    });
+  }
+
+  function autodetect(){
+    var list = [];
+    var i = 1;
+    return new Promise(function(resolve){
+      function step(){
+        if (i > AUTODETECT_MAX){ resolve(list); return; }
+        findAtIndex(i).then(function(src){
+          if (src){ list.push(src); i++; step(); }
+          else { resolve(list); }
+        });
+      }
+      step();
+    });
+  }
+
+  /* ---------- PLACEHOLDERS (só se não houver logótipos) ---------- */
+  function placeholder(label){
+    var svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300">' +
+      '<rect width="600" height="300" fill="#ffffff"/>' +
+      '<rect x="40" y="40" width="520" height="220" rx="18" fill="none" ' +
+      'stroke="#c9cedb" stroke-width="3" stroke-dasharray="10 9"/>' +
+      '<text x="300" y="150" font-family="Segoe UI,Arial,sans-serif" ' +
+      'font-size="34" font-weight="700" fill="#1a2236" text-anchor="middle">' +
+      label + '</text>' +
+      '<text x="300" y="196" font-family="Segoe UI,Arial,sans-serif" ' +
+      'font-size="17" letter-spacing="3" fill="#8b93a8" text-anchor="middle">' +
+      'LOGÓTIPO AQUI</text></svg>';
+    return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  }
+
+  /* ---------- SLIDESHOW ---------- */
+  var slides = [], dots = [], current = 0, timer = null;
+
+  function buildSlides(sources){
+    var card = $("card");
+    var dotbox = $("dots");
+    card.innerHTML = "";
+    dotbox.innerHTML = "";
+    slides = []; dots = [];
+
+    sources.forEach(function(src, i){
+      var slide = document.createElement("div");
+      slide.className = "slide" + (i === 0 ? " is-active" : "");
+      var img = document.createElement("img");
+      img.src = src;
+      img.alt = "";
+      slide.appendChild(img);
+      card.appendChild(slide);
+      slides.push(slide);
+
+      var dot = document.createElement("div");
+      dot.className = "dot" + (i === 0 ? " is-active" : "");
+      dotbox.appendChild(dot);
+      dots.push(dot);
+    });
+
+    if (sources.length > 1){
+      timer = setInterval(advance, SLIDE_SECONDS * 1000);
+    } else {
+      dotbox.style.display = "none";
+    }
+  }
+
+  function advance(){
+    slides[current].className = "slide";
+    dots[current].className = "dot";
+    current = (current + 1) % slides.length;
+    slides[current].className = "slide is-active";
+    dots[current].className = "dot is-active";
+  }
+
+  /* ---------- ARRANQUE ---------- */
+  function start(){
+    tick();
+
+    var chosen = (SPONSORS && SPONSORS.length)
+      ? Promise.resolve(SPONSORS)
+      : autodetect();
+
+    chosen.then(function(list){
+      if (!list || !list.length){
+        $("demoflag").style.display = "block";
+        list = [ placeholder("Patrocinador 1"),
+                 placeholder("Patrocinador 2"),
+                 placeholder("Patrocinador 3") ];
+      }
+      buildSlides(list);
+    });
+  }
+
+  /* manter o ecrã acordado, se o browser suportar (inofensivo se não) */
+  function keepAwake(){
+    try{
+      if (navigator.wakeLock && navigator.wakeLock.request){
+        navigator.wakeLock.request("screen").catch(function(){});
+      }
+    }catch(e){}
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    start();
+    keepAwake();
+    document.addEventListener("visibilitychange", function(){
+      if (!document.hidden){ keepAwake(); }
+    });
+  });
+</script>
+</body>
+</html>
